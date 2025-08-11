@@ -1,51 +1,71 @@
-// Paste your Firebase config here
+// --- FIREBASE CONFIG (paste yours here) ---
 const firebaseConfig = {
-  apiKey: "...", projectId: "...", databaseURL: "https://<your-db>.firebaseio.com"
+  apiKey: "AIzaSyAEXEYn_voj_WqaPfuTPio2qm9Qr62UpXg",
+  authDomain: "our-poc-a999b.firebaseapp.com",
+  databaseURL: "https://our-poc-a999b-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "our-poc-a999b",
+  storageBucket: "our-poc-a999b.firebasestorage.app",
+  messagingSenderId: "116449409203",
+  appId: "1:116449409203:web:60d62bed37577906b258c6"
 };
 firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
 
+const db = firebase.database();
 const gameId = 'demo';
 const gameRef = db.ref(`games/${gameId}`);
-const answersRef = db.ref(`games/${gameId}/answers`);
+const answersRef = gameRef.child('answers');
+const playersRef = gameRef.child('players');
 
-// --- init Rive ---
+// --- RIVE SETUP ---
 const canvas = document.getElementById('riveCanvas');
-const rive = new rive.Rive({
+const riveAnim = new rive.Rive({
   src: '/assets/quiz-poc.riv',
   canvas,
   autoplay: true,
   stateMachines: 'QuizMachine',
-  onLoad: () => {
-    inputs = rive.stateMachineInputs('QuizMachine'); // API varies by runtime version
-    questionIndexInput = inputs.find(i => i.name === 'questionIndex');
-    triggerCorrect = inputs.find(i => i.name === 'triggerCorrect');
-    triggerWrong = inputs.find(i => i.name === 'triggerWrong');
-  }
+  onLoad: () => console.log("Rive loaded")
 });
 
-// --- minimal question text ---
-const questionText = document.getElementById('questionText');
-const question = {
-  index: 1,
-  text: "Which Auckland landmark is most vulnerable to coastal flooding?",
-  answers: { A: "Britomart", B: "Mt Eden", C: "Sky Tower", D: "Auckland Museum" },
-  correct: "A"
-};
-questionText.innerText = question.text;
+// --- QUESTIONS ---
+const questions = [
+  {
+    text: "Which Auckland landmark is most at risk of coastal flooding?",
+    answers: { A: "Britomart", B: "Mt Eden", C: "Sky Tower", D: "One Tree Hill" },
+    correct: "A"
+  }
+];
 
-// write initial state
-gameRef.child('state').set({questionIndex: question.index});
+// Set current question
+let currentQuestionIndex = 0;
+function sendQuestion() {
+  gameRef.child('state').set({
+    questionIndex: currentQuestionIndex,
+    question: questions[currentQuestionIndex]
+  });
+  answersRef.remove(); // clear old answers
+}
+sendQuestion();
 
-// Listen for answers (first answer wins for POC)
+// --- Listen for answers ---
 answersRef.on('child_added', snap => {
-  const payload = snap.val(); // { playerId, choice }
-  const choice = payload.choice;
-  if (choice === question.correct) {
-    triggerCorrect.fire(); // trigger the Rive correct animation
-    gameRef.child('players').child(payload.playerId).update({score: 1});
+  const { playerId, choice } = snap.val();
+  if (choice === questions[currentQuestionIndex].correct) {
+    playersRef.child(playerId).transaction(p => {
+      if (!p) return { name: 'Unknown', score: 1 };
+      return { ...p, score: (p.score || 0) + 1 };
+    });
+    console.log("Correct from", playerId);
   } else {
-    triggerWrong.fire();
-    gameRef.child('players').child(payload.playerId).update({score: 0});
+    console.log("Wrong from", playerId);
   }
+  updateScoreboard();
 });
+
+// --- Scoreboard ---
+function updateScoreboard() {
+  playersRef.once('value').then(snap => {
+    const scores = snap.val() || {};
+    const board = Object.values(scores).map(p => `${p.name}: ${p.score || 0}`).join('<br>');
+    document.getElementById('scoreboard').innerHTML = `<h3>Scores</h3>${board}`;
+  });
+}
