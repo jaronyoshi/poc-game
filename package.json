@@ -1,0 +1,16 @@
+{
+  "games": {
+    "demo": {
+      "state": {
+        "questionIndex": 1,
+        "active": true
+      },
+      "answers": {
+        // answers written by players
+      },
+      "players": {
+        // player metadata 
+      }
+    }
+  }
+}
